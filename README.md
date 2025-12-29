@@ -97,7 +97,6 @@ kubectl apply -k kustomize/
 
 ```bash
 export DOMAIN_NAME="test.example.com"
-export ACME_CONTACT_EMAIL="test@example.com"
 ```
 
 6. Run the file to generate customized yaml files from templates

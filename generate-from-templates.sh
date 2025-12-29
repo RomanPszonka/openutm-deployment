@@ -1,5 +1,4 @@
 export DOMAIN_NAME="test.example.com"
-export ACME_CONTACT_EMAIL="test@example.com"
 
 for file_name in ingress; do
     (
