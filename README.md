@@ -45,6 +45,7 @@ helm repo update
 helm install caddy-ingress-controller caddy-ingress-controller/caddy-ingress-controller \
     --namespace caddy-system \
     --create-namespace \
+    --version 1.3.0 \
     --set ingressController.config.email="$ACME_CONTACT_EMAIL" \
     --set ingressController.config.acmeCA="https://acme-v02.api.letsencrypt.org/directory"
 ```
