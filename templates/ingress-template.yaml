@@ -42,6 +42,9 @@ kind: Ingress
 metadata:
   name: ingress-root
   namespace: openutm
+  annotations:
+    caddy.ingress.kubernetes.io/config: |
+      redir https://spotlight.${DOMAIN_NAME}{uri} permanent
 spec:
   ingressClassName: caddy
   rules:
