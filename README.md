@@ -4,9 +4,9 @@ A repository to help with deployment of the OpenUTM toolset in your cloud.
 
 ## Steps
 
-This example is based on **DigitalOcean** cloud, it uses the `kustomize` tool and kubectl so you can use it with your cloud with it.
+This example is based on **DigitalOcean** cloud, it uses the `kustomize` tool and `kubectl` so you can use it with your cloud with it.
 
-### 🚀 Before You Begin (3-step process)
+### 🚀 Before You Begin
 
 To ensure a smooth deployment process, follow these three steps:
 
@@ -26,9 +26,9 @@ If you run into any issues, feel free to reach out to us on Discord. We're here 
 
 1. Installed and configured `doctl`, [link](https://docs.digitalocean.com/reference/doctl/how-to/install/)
 2. Created Kubernetes Cluster, [link](https://docs.digitalocean.com/products/kubernetes/how-to/create-clusters/)
-3. Created Load Balancer (Optional - Caddy will create one automatically)
-4. You can connect to your Cluster, [link](https://docs.digitalocean.com/products/kubernetes/how-to/connect-to-cluster/)
-5. Your domain sub zone points to DigitalOcean DNS, [link](https://docs.digitalocean.com/products/networking/dns/getting-started/dns-registrars/)
+3. You can connect to your Cluster, [link](https://docs.digitalocean.com/products/kubernetes/how-to/connect-to-cluster/)
+4. Your domain sub zone points to DigitalOcean DNS, [link](https://docs.digitalocean.com/products/networking/dns/getting-started/dns-registrars/)
+5. `openssl` installed (for generating keys)
 
 ### Your deployment
 
@@ -36,87 +36,93 @@ If you run into any issues, feel free to reach out to us on Discord. We're here 
 
 1. Install `caddy-ingress-controller`
 
-```bash
-# SETUP env variables
-export ACME_CONTACT_EMAIL="test@example.com"
+    ```bash
+    # SETUP env variables
+    export ACME_CONTACT_EMAIL="test@example.com"
 
-helm repo add caddy-ingress-controller https://caddyserver.github.io/ingress/
-helm repo update
-helm install caddy-ingress-controller caddy-ingress-controller/caddy-ingress-controller \
-    --namespace caddy-system \
-    --create-namespace \
-    --version 1.3.0 \
-    --set ingressController.config.email="$ACME_CONTACT_EMAIL" \
-    --set ingressController.config.acmeCA="https://acme-v02.api.letsencrypt.org/directory"
-```
+    helm repo add caddy-ingress-controller https://caddyserver.github.io/ingress/
+    helm repo update
+    helm install caddy-ingress-controller caddy-ingress-controller/caddy-ingress-controller \
+        --namespace caddy-system \
+        --create-namespace \
+        --version 1.3.0 \
+        --set ingressController.config.email="$ACME_CONTACT_EMAIL" \
+        --set ingressController.config.acmeCA="https://acme-v02.api.letsencrypt.org/directory"
+    ```
 
 2. Create A and CNAME records for your domain on the DigitalOcean NS
 
-**Note**: Wait for the Load Balancer to be assigned an IP address. You can check this with `kubectl get svc -n caddy-system caddy-ingress-controller`.
+    **Note**: Wait for the Load Balancer to be assigned an IP address. You can check this with `kubectl get svc -n caddy-system caddy-ingress-controller`.
 
-```bash
-# SETUP env variables
-export DOMAIN_NAME="test.example.com"
-# Get the Load Balancer IP from the installed service
-export LOAD_BALANCER_IP=$(kubectl get svc -n caddy-system caddy-ingress-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+    ```bash
+    # SETUP env variables
+    export DOMAIN_NAME="test.example.com"
 
-# SETUP A and CNAME
-doctl compute domain records list $DOMAIN_NAME
-doctl compute domain delete $DOMAIN_NAME -f
-doctl compute domain create $DOMAIN_NAME
-doctl compute domain records create $DOMAIN_NAME \
-    --record-type "A" --record-name "$DOMAIN_NAME." \
-    --record-data "$LOAD_BALANCER_IP" \
-    --record-ttl "30"
-doctl compute domain records create $DOMAIN_NAME \
-    --record-type "CNAME" --record-name "*" \
-    --record-data "$DOMAIN_NAME." \
-    --record-ttl "30"
-doctl compute domain records list $DOMAIN_NAME
-```
+    # Get the Load Balancer IP from the installed service
+    export LOAD_BALANCER_IP=$(kubectl get svc -n caddy-system caddy-ingress-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
-3. Edit your `.env` files from `env.examples` folder, and place them in this structure:
+    # SETUP A and CNAME
+    doctl compute domain records list $DOMAIN_NAME
+    doctl compute domain delete $DOMAIN_NAME -f
+    doctl compute domain create $DOMAIN_NAME
+    doctl compute domain records create $DOMAIN_NAME \
+        --record-type "A" --record-name "$DOMAIN_NAME." \
+        --record-data "$LOAD_BALANCER_IP" \
+        --record-ttl "30"
+    doctl compute domain records create $DOMAIN_NAME \
+        --record-type "CNAME" --record-name "*" \
+        --record-data "$DOMAIN_NAME." \
+        --record-ttl "30"
+    doctl compute domain records list $DOMAIN_NAME
+    ```
 
-```bash
-└── kustomize
-    ├── blender
-    │   └── .env.blender
-    ├── passport
-    │   └── .env.passport
-    └── spotlight
-        └── .env.spotlight
-```
+3. Create your `.env` files from the examples:
+
+    ```bash
+    cp env.examples/.blender.env.example kustomize/blender/.env.blender
+    cp env.examples/.passport.env.example kustomize/passport/.env.passport
+    cp env.examples/.spotlight.env.example kustomize/spotlight/.env.spotlight
+    ```
+
+    Then edit these new files with your specific configuration (database passwords, secrets, etc.).
 
 4. Generate the OIDC key and deploy your applications
 
-```bash
-openssl genrsa -out kustomize/passport/oidc.key 4096
-kubectl apply -k kustomize/
-```
+    > **Note:** Blender and Spotlight containers may restart or fail health checks initially until they are linked with valid Passport credentials (see "Configuring Passport" section below).
 
-5. Edit `generate-from-templates.sh` and customize the following env variables
+    ```bash
+    openssl genrsa -out kustomize/passport/oidc.key 4096
+    kubectl apply -k kustomize/
+    ```
 
-```bash
-export DOMAIN_NAME="test.example.com"
-```
+5. Generate `Ingress` manifest
 
-6. Run the file to generate customized yaml files from templates
+    Export your domain name and run the generation script. This will replace placeholders in `templates/` and create `ingress.yaml`.
 
-```bash
-./generate-from-templates.sh
-```
+    ```bash
+    export DOMAIN_NAME="test.example.com"
+    ./generate-from-templates.sh
+    ```
 
-7. Create `Ingress`
+6. Create `Ingress`
 
-```bash
-kubectl apply -f ingress.yaml
-```
+    ```bash
+    kubectl apply -f ingress.yaml
+    ```
 
-It will take some time for all components to settle and acquire certificates. After that, your apps should be accessible under the following domains with trusted certificates:
+7. Verify the Deployment
 
-- `https://blender.$DOMAIN_NAME`
-- `https://spotlight.$DOMAIN_NAME`
-- `https://passport.$DOMAIN_NAME`
+    Check that all pods are running and healthy:
+
+    ```bash
+    kubectl get pods -n openutm
+    ```
+
+    It will take some time for all components to settle and acquire certificates. After that, your apps should be accessible under the following domains with trusted certificates:
+
+    - `https://blender.$DOMAIN_NAME`
+    - `https://spotlight.$DOMAIN_NAME`
+    - `https://passport.$DOMAIN_NAME`
 
 ### Configuring Passport and subsequently Blender and Spotlight
 

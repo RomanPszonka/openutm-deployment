@@ -22,7 +22,7 @@ spec:
       serviceAccountName: blender-svc
       containers:
         - name: blender
-          image: blender
+          image: flight-blender
           command:
             - ./entrypoints/with-database/entrypoint-prod.sh
           # imagePullPolicy: IfNotPresent
